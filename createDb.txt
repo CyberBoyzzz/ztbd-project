@@ -1,0 +1,53 @@
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(50) NOT NULL,
+  surname VARCHAR(50) NOT NULL,
+  email VARCHAR(100) NOT NULL UNIQUE,
+  phone VARCHAR(15) NOT NULL UNIQUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE comics (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(100) NOT NULL,
+  author VARCHAR(100) NOT NULL,
+  publisher VARCHAR(100),
+  year INT,
+  genre VARCHAR(50),
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE transactions (
+  id SERIAL PRIMARY KEY,
+  action VARCHAR(50) NOT NULL,
+  date TIMESTAMP NOT NULL,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  comic_id INT NOT NULL REFERENCES comics(id) ON DELETE CASCADE,
+  due_date TIMESTAMP,
+  returned_at TIMESTAMP
+);
+
+CREATE TABLE availability (
+  comic_id INT PRIMARY KEY REFERENCES comics(id) ON DELETE CASCADE,
+  available_count INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE ratings (
+  id SERIAL PRIMARY KEY,
+  comic_id INT NOT NULL REFERENCES comics(id) ON DELETE CASCADE,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rating INT CHECK (rating >= 1 AND rating <= 5),
+  review TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+HMSET user:<user_id> id <user_id> name <name> surname <surname> email <email> phone <phone> created_at <created_at>
+
+HMSET comic:<comic_id> id <comic_id> title <title> author <author> publisher <publisher> year <year> genre <genre> description <description> created_at <created_at>
+
+HMSET availability:<comic_id> comic_id <comic_id> available_count <available_count>
+
+HMSET transaction:<transaction_id> id <transaction_id> action <action> date <date> user_id <user_id> comic_id <comic_id> due_date <due_date> returned_at <returned_at>
+
+HMSET rating:<comic_id>:<user_id> comic_id <comic_id> user_id <user_id> rating <rating> review <review> created_at <created_at>

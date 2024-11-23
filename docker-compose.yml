@@ -1,0 +1,21 @@
+version: '3'
+
+services:
+  postgres-db:
+    image: postgres:alpine
+    environment:
+      - DB_HOST=${DB_HOST_POSTGRES}
+      - DB_PORT=${DB_PORT_POSTGRES}
+      - POSTGRES_USER=${DB_USER_POSTGRES}
+      - POSTGRES_PASSWORD=${DB_PASSWORD_POSTGRES}
+      - POSTGRES_DB=${DB_NAME_POSTGRES}
+    ports:
+      - '5432:5432'
+
+  redis-db:
+    image: redis:alpine
+    environment:
+      - REDIS_HOST=${DB_HOST_REDIS}
+      - REDIS_PORT=${DB_PORT_REDIS}
+    ports:
+      - '6379:6379'
