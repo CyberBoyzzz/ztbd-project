@@ -288,7 +288,7 @@ const createCharts = async (sizes: number[], pgTimes: number[][], redisTimes: nu
 
     fs.writeFileSync(barChartPath, barChartImage);
 
-    console.log(`✅ Wykres słupkowy zapisany: ${barChartPath}`);
+    console.log(`\n✅ Wykres słupkowy zapisany: ${barChartPath}`);
   }
 
   // Konfiguracja wykresu liniowego
@@ -351,7 +351,7 @@ const createCharts = async (sizes: number[], pgTimes: number[][], redisTimes: nu
 
   fs.writeFileSync(lineChartPath, lineChartImage);
 
-  console.log(`✅ Wykres liniowy zapisany: ${lineChartPath}`);
+  console.log(`\n✅ Wykres liniowy zapisany: ${lineChartPath}`);
 };
 
 // Symulacja
@@ -381,7 +381,7 @@ const simulate = async () => {
     console.log('▶️ Redis...');
 
     const redisTimes = await performRedisOperations(dataset);
-    
+
     redisTimesAll.push(redisTimes);
   }
 
@@ -391,7 +391,7 @@ const simulate = async () => {
 
 simulate()
   .then(() => {
-    console.log('✅ Symulacje zakończone!');
+    console.log('\n✅ Symulacje zakończone!');
     process.exit(0);
   })
   .catch((error) => {
