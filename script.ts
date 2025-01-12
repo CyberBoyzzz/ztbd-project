@@ -2,6 +2,9 @@ import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { faker } from '@faker-js/faker';
 import * as dotenv from 'dotenv';
+import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
+import { ChartType } from 'chart.js';
+import * as fs from 'fs';
 
 dotenv.config({ path: './.env' });
 
@@ -32,9 +35,7 @@ const redisClient = new Redis({
 
 // Czyszczenie danych z baz
 const clearDatabases = async () => {
-  console.log('🧹 Clearing databases...');
-
-  // Czyszczenie danych Postgres
+  console.log('🧹 Czyszczenie danych...');
   const client = await postgresPool.connect();
   try {
     await client.query('TRUNCATE TABLE comics RESTART IDENTITY CASCADE');
@@ -45,7 +46,6 @@ const clearDatabases = async () => {
     client.release();
   }
 
-  // Czyszczenie danych Redis
   try {
     await redisClient.flushall();
     console.log('✅ Redis - wyczyszczony.\n');
@@ -69,12 +69,14 @@ const generateDataset = (size: number) => {
   return comics;
 };
 
-// Operacje PostgreSQL
-const performPostgresOperations = async (dataset: Comic[]) => {
+// Mierzenie czasu operacji PostgreSQL
+const performPostgresOperations = async (dataset: Comic[]): Promise<number[]> => {
+  const times: number[] = [];
+  
   console.time('PostgreSQL - Create');
+  const startCreate = Date.now();
   for (const comic of dataset) {
     const { title, author, publisher, year, genre, description } = comic;
-
     const client = await postgresPool.connect();
     const result = await client.query(
       'INSERT INTO comics (title, author, publisher, year, genre, description) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
@@ -83,41 +85,51 @@ const performPostgresOperations = async (dataset: Comic[]) => {
     comic.id = result.rows[0].id;
     client.release();
   }
+  times.push(Date.now() - startCreate);
   console.timeEnd('PostgreSQL - Create');
 
   console.time('PostgreSQL - Read');
+  const startRead = Date.now();
   for (const comic of dataset) {
     const client = await postgresPool.connect();
     await client.query('SELECT * FROM comics WHERE title = $1', [comic.title]);
     client.release();
   }
+  times.push(Date.now() - startRead);
   console.timeEnd('PostgreSQL - Read');
 
   console.time('PostgreSQL - Update');
+  const startUpdate = Date.now();
   for (const comic of dataset) {
     const newTitle = faker.lorem.words(2);
-
     const client = await postgresPool.connect();
     await client.query('UPDATE comics SET title = $1 WHERE title = $2', [newTitle, comic.title]);
     client.release();
   }
+  times.push(Date.now() - startUpdate);
   console.timeEnd('PostgreSQL - Update');
 
   console.time('PostgreSQL - Delete');
+  const startDelete = Date.now();
   for (const comic of dataset) {
     const client = await postgresPool.connect();
     await client.query('DELETE FROM comics WHERE title = $1', [comic.title]);
     client.release();
   }
-  console.timeEnd('PostgreSQL - Delete\n');
+  times.push(Date.now() - startDelete);
+  console.timeEnd('PostgreSQL - Delete');
+
+  return times;
 };
 
-// Operacje Redis
-const performRedisOperations = async (dataset: Comic[]) => {
+// Mierzenie czasu operacji Redis
+const performRedisOperations = async (dataset: Comic[]): Promise<number[]> => {
+  const times: number[] = [];
+  
   console.time('Redis - Create');
+  const startCreate = Date.now();
   for (const comic of dataset) {
     const { title, author, publisher, year, genre, description } = comic;
-
     const comicId = comic.id || faker.number.int();
     await redisClient.hmset(`comic:${comicId}`, {
       id: comicId.toString(),
@@ -131,48 +143,109 @@ const performRedisOperations = async (dataset: Comic[]) => {
     });
     comic.id = comicId;
   }
+  times.push(Date.now() - startCreate);
   console.timeEnd('Redis - Create');
 
   console.time('Redis - Read');
+  const startRead = Date.now();
   for (const comic of dataset) {
     await redisClient.hgetall(`comic:${comic.id}`);
   }
+  times.push(Date.now() - startRead);
   console.timeEnd('Redis - Read');
 
   console.time('Redis - Update');
+  const startUpdate = Date.now();
   for (const comic of dataset) {
     const newTitle = faker.lorem.words(2);
     await redisClient.hset(`comic:${comic.id}`, 'title', newTitle);
   }
+  times.push(Date.now() - startUpdate);
   console.timeEnd('Redis - Update');
 
   console.time('Redis - Delete');
+  const startDelete = Date.now();
   for (const comic of dataset) {
     await redisClient.del(`comic:${comic.id}`);
   }
+  times.push(Date.now() - startDelete);
   console.timeEnd('Redis - Delete');
+
+  return times;
+};
+
+// Generowanie wykresu
+const chartJSNodeCanvas = new ChartJSNodeCanvas({ width: 800, height: 600 });
+
+const createChart = async (labels: string[], pgTimes: number[], redisTimes: number[], size: number) => {
+  const configuration: { 
+    type: ChartType,
+    data: { 
+      labels: string[], 
+      datasets: { label: string; data: number[]; backgroundColor: string }[] 
+    }, 
+    options: { 
+      responsive: boolean; 
+      plugins: { 
+        title: { 
+          display: boolean; 
+          text: string; 
+        }; 
+      }; 
+    } 
+  } = {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'PostgreSQL',
+          data: pgTimes,
+          backgroundColor: 'rgba(54, 162, 235, 0.6)',
+        },
+        {
+          label: 'Redis',
+          data: redisTimes,
+          backgroundColor: 'rgba(255, 99, 132, 0.6)',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: {
+          display: true,
+          text: `Porównanie czasów operacji CRUD dla ${size} rekordów`,
+        },
+      },
+    },
+  };
+
+  const image = await chartJSNodeCanvas.renderToBuffer(configuration);
+  const outputPath = `charts/crud_times_${size}.png`;
+  fs.writeFileSync(outputPath, image);
+  console.log(`✅ Wykres zapisany: ${outputPath}`);
 };
 
 // Symulacja
 const simulate = async () => {
-  const datasetSizes = [1000, 10000, 100000];
+  const datasetSizes = [100, 1000, 10000];
+  fs.mkdirSync('charts', { recursive: true });
 
   for (const size of datasetSizes) {
-    console.log(`\n🔹 Uruchamianie symulacji dla rozmiaru danych: ${size}`);
+    console.log(`\n🔹 Symulacja dla ${size} rekordów...`);
 
-    // Czyszczenie baz przed symulacją
     await clearDatabases();
-
-    // Generowanie zbioru danych
     const dataset = generateDataset(size);
 
-    // Operacje PostgreSQL
-    console.log('▶️ Uruchamianie symulacji PostgreSQL...\n');
-    await performPostgresOperations(dataset);
+    console.log('▶️ PostgreSQL...');
+    const pgTimes = await performPostgresOperations(dataset);
 
-    // Operacje Redis
-    console.log('▶️ Uruchamianie symulacji Redis...\n');
-    await performRedisOperations(dataset);
+    console.log('▶️ Redis...');
+    const redisTimes = await performRedisOperations(dataset);
+
+    const labels = ['Create', 'Read', 'Update', 'Delete'];
+    await createChart(labels, pgTimes, redisTimes, size);
   }
 };
 
@@ -182,6 +255,6 @@ simulate()
     process.exit(0);
   })
   .catch((error) => {
-    console.error('❌ Wystąpił błąd podczas przeprowadzania symulacji:', error);
+    console.error('❌ Wystąpił błąd:', error);
     process.exit(1);
   });
