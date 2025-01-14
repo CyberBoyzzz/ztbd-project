@@ -95,6 +95,11 @@ const performPostgresOperations = async (dataset: Comic[]): Promise<number[]> =>
 
     comic.id = result.rows[0].id;
 
+    await client.query(
+      'INSERT INTO availability (comic_id, available_count) VALUES ($1, $2)',
+      [comic.id, faker.number.int({ min: 1, max: 10 })]
+    );
+
     client.release();
   }
 
@@ -109,7 +114,13 @@ const performPostgresOperations = async (dataset: Comic[]): Promise<number[]> =>
   for (const comic of dataset) {
     const client = await postgresPool.connect();
 
-    await client.query('SELECT * FROM comics WHERE title = $1', [comic.title]);
+    await client.query(
+      `SELECT comics.*, availability.* 
+       FROM comics
+       JOIN availability ON comics.id = availability.comic_id
+       WHERE comics.title = $1`, 
+      [comic.title]
+    );    
 
     client.release();
   }
@@ -128,6 +139,7 @@ const performPostgresOperations = async (dataset: Comic[]): Promise<number[]> =>
     const client = await postgresPool.connect();
 
     await client.query('UPDATE comics SET title = $1 WHERE title = $2', [newTitle, comic.title]);
+    await client.query('UPDATE availability SET available_count = $1 WHERE comic_id = $2', [faker.number.int({ min: 1, max: 10 }), comic.id]);
 
     client.release();
   }
@@ -144,6 +156,7 @@ const performPostgresOperations = async (dataset: Comic[]): Promise<number[]> =>
     const client = await postgresPool.connect();
 
     await client.query('DELETE FROM comics WHERE title = $1', [comic.title]);
+    await client.query('DELETE FROM availability WHERE comic_id = $1', [comic.id]);
 
     client.release();
   }
@@ -181,6 +194,8 @@ const performRedisOperations = async (dataset: Comic[]): Promise<number[]> => {
       created_at: new Date().toISOString(),
     });
 
+    await redisClient.hset(`availability:${comicId}`, 'available_count', faker.number.int({ min: 1, max: 10 }).toString());
+
     comic.id = comicId;
   }
 
@@ -194,6 +209,7 @@ const performRedisOperations = async (dataset: Comic[]): Promise<number[]> => {
 
   for (const comic of dataset) {
     await redisClient.hgetall(`comic:${comic.id}`);
+    await redisClient.hget(`availability:${comic.id}`, 'available_count');
   }
 
   times.push(Date.now() - startRead);
@@ -208,6 +224,7 @@ const performRedisOperations = async (dataset: Comic[]): Promise<number[]> => {
     const newTitle = faker.lorem.words(2);
 
     await redisClient.hset(`comic:${comic.id}`, 'title', newTitle);
+    await redisClient.hset(`availability:${comic.id}`, 'available_count', faker.number.int({ min: 1, max: 10 }).toString());
   }
 
   times.push(Date.now() - startUpdate);
@@ -220,6 +237,7 @@ const performRedisOperations = async (dataset: Comic[]): Promise<number[]> => {
 
   for (const comic of dataset) {
     await redisClient.del(`comic:${comic.id}`);
+    await redisClient.del(`availability:${comic.id}`);
   }
 
   times.push(Date.now() - startDelete);
