@@ -80,7 +80,6 @@ const performPostgresOperations = async (dataset: Comic[]): Promise<number[]> =>
   const times: number[] = [];
   
   console.time('PostgreSQL - Create');
-
   const startCreate = Date.now();
 
   for (const comic of dataset) {
@@ -88,23 +87,34 @@ const performPostgresOperations = async (dataset: Comic[]): Promise<number[]> =>
 
     const client = await postgresPool.connect();
 
-    const result = await client.query(
-      'INSERT INTO comics (title, author, publisher, year, genre, description) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-      [title, author, publisher, year, genre, description]
-    );
+    try {
+      await client.query('BEGIN');
 
-    comic.id = result.rows[0].id;
+      const result = await client.query(
+        'INSERT INTO comics (title, author, publisher, year, genre, description) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+        [title, author, publisher, year, genre, description]
+      );
 
-    await client.query(
-      'INSERT INTO availability (comic_id, available_count) VALUES ($1, $2)',
-      [comic.id, faker.number.int({ min: 1, max: 10 })]
-    );
+      comic.id = result.rows[0].id;
 
-    client.release();
+      await client.query(
+        'INSERT INTO availability (comic_id, available_count) VALUES ($1, $2)',
+        [comic.id, faker.number.int({ min: 1, max: 10 })]
+      );
+
+      await client.query('COMMIT');
+    } catch (error) {
+
+      await client.query('ROLLBACK');
+
+      console.error('Error inserting comic and availability:', error);
+    } finally {
+      client.release();
+    }
   }
 
   times.push(Date.now() - startCreate);
-
+  
   console.timeEnd('PostgreSQL - Create');
 
   console.time('PostgreSQL - Read');
