@@ -114,7 +114,7 @@ const performPostgresOperations = async (dataset: Comic[]): Promise<number[]> =>
   }
 
   times.push(Date.now() - startCreate);
-  
+
   console.timeEnd('PostgreSQL - Create');
 
   console.time('PostgreSQL - Read');
@@ -131,6 +131,8 @@ const performPostgresOperations = async (dataset: Comic[]): Promise<number[]> =>
        WHERE comics.title = $1`, 
       [comic.title]
     );    
+
+    await client.query('SELECT * FROM availability WHERE comic_id = $1', [comic.id]);
 
     client.release();
   }
@@ -384,7 +386,7 @@ const createCharts = async (sizes: number[], pgTimes: number[][], redisTimes: nu
 
 // Symulacja
 const simulate = async () => {
-  const datasetSizes = [10, 50, 100];
+  const datasetSizes = [1000, 10000, 100000];
 
   fs.mkdirSync('charts', { recursive: true });
 
